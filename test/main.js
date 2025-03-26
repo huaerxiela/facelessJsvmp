@@ -138,6 +138,7 @@ function preprocess(ast) {
     const FOR_IN_LET = template("let A = _F_li[_F_i]");
     const FOR_IN = template("for (let _F_i = 0, _F_li = _faceless_all_keys(A); _F_i < _F_li.length; _F_i++) B");
     const ALL_KEYS = template("function _faceless_all_keys(o){let _keys=[],l;while(1){l=Object.keys(o);_keys=_keys.concat(l);o=o.__proto__;if(!l.length){break}}return _keys}");
+    const BLOCK = template("{ A }");
     const liftingFunction = {
         FunctionDeclaration(path) {
             let block = path.findParent(p => p.isBlockStatement() || p.isProgram()).node.body;
@@ -271,11 +272,23 @@ function preprocess(ast) {
             let FOR = FOR_OF, LET = FOR_OF_LET;
             if (path.isForInStatement()) {
                 FOR = FOR_IN, LET = FOR_IN_LET;
-                ast.program.body.unshift(ALL_KEYS());
+                let hasALL_KEYS = ast.program.body.some((node) => {
+                    return (
+                        types.isFunctionDeclaration(node) &&
+                        types.isIdentifier(node.id) &&
+                        node.id.name === "_faceless_all_keys"
+                    );
+                });
+                if (!hasALL_KEYS){
+                    ast.program.body.unshift(ALL_KEYS());
+                }
             }
             let name = left;
             if (types.isVariableDeclaration(left)) {
                 name = left.declarations[0].id;
+            }
+            if (!body.body){
+                body = BLOCK({A:body})
             }
             body.body.unshift(LET({A: name}));
             path.replaceInline(FOR({A: right, B: body}));
@@ -289,7 +302,6 @@ function preprocess(ast) {
         writeFileSync(preprocessFile, generator(ast).code, (e) => {
         })
     }
-
     return ast
 }
 
@@ -416,7 +428,15 @@ function sourceToByte(node, option = {}) {
     let t0, t1, t2, t3, t4, t5;
     switch (node.type) {
         case "Identifier":
-            poolIndex("lod_c", node.name, option)
+            switch (node.name){
+                case "window":
+                    poolIndex("lod_c", window, option)
+                    break;
+                default:
+                    console.log("try lod_c", node.name)
+                    poolIndex("lod_c", node.name, option)
+                    break;
+            }
             break
         case "VariableDeclaration":
             node.declarations.forEach(n => sourceToByte(n))
